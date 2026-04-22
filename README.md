@@ -1,6 +1,6 @@
 # RenameUserPro - Windows 中文用户文件夹重命名工具
 
-**安全、可靠地将 Windows 10/11 的中文用户文件夹重命名为英文名，彻底解决专业软件路径兼容性问题。**
+**个人用户电脑 安全、可靠地将 Windows 10/11 的中文用户文件夹重命名为英文名，彻底解决专业软件路径兼容性问题。**
 
 > ⚠️ 无需重装系统，无需新建账户，修改后原有账户名和密码保持不变。
 
@@ -105,9 +105,12 @@
 | 当前登录账户 | 建议使用内置 `Administrator` 账户（需先手动启用）或其他管理员账户 |
 | 目标用户状态 | **必须完全注销**，不能有任何活动进程或后台会话 |
 
-> 💡 如何启用 Administrator 账户？  
-> 以管理员身份运行命令提示符，执行：  
-> `net user Administrator /active:yes`  
+> 💡 如何启用 Administrator 账户？
+  
+> 以管理员身份运行命令提示符，执行：
+
+> `net user Administrator /active:yes` 
+
 > 然后注销当前账户，登录 Administrator。
 
 ### 参数说明
@@ -146,3 +149,133 @@
 ```powershell
 .\RenameUserPro.ps1 -BatchMode
 ```
+- 自动为每个中文用户生成英文名，需输入 `CONFIRM ALL` 确认后批量执行。
+
+#### 4️⃣ 模拟运行（安全预览）
+```powershell
+.\RenameUserPro.ps1 -DryRun
+```
+- 查看所有将要修改的项目，不实际更改系统。
+
+#### 5️⃣ 完整参数示例
+```powershell
+.\RenameUserPro.ps1 -BatchMode -ForceLocalAccount -ReportPath "C:\report.json" -NoWait
+```
+
+---
+
+## 🔄 执行过程详解
+脚本执行的主要阶段如下：
+| 阶段 | 操作内容 |
+|------|----------|
+| **1. 初始化** | 检查管理员权限、系统版本、PowerShell 版本，启用长路径支持 |
+| **2. 用户扫描** | 获取本地用户列表，筛选出中文名称且未修改过的用户 |
+| **3. 预检** | 登录状态检测、BitLocker/EFS 检查、微软账户检测与转换引导 |
+| **4. OneDrive 处理** | 提示同步状态，断开链接（执行 `OneDrive.exe /unlink`） |
+| **5. 核心重命名** | 创建还原点 → 更新注册表 `ProfileImagePath` → 终止占用进程 → 重命名文件夹 → 加载用户注册表蜂巢 |
+| **6. 路径修复** | 修复 Shell Folders、环境变量、快捷方式、Store 应用、交接点等 |
+| **7. 符号链接** | 执行 `mklink /J "旧中文路径" "新英文路径"` 创建目录联接 |
+| **8. 收尾** | 恢复 OneDrive 提示、重启 Explorer、可选重建索引、输出日志 |
+
+每一步都有对应的回滚动作，确保失败可恢复。
+
+---
+
+## 🔧 错误处理与回滚机制
+### 自动回滚触发条件
+- 脚本任何步骤抛出终止性错误（`throw`）。
+- 用户按下 `Ctrl+C` 中断执行。
+- 注册表蜂巢加载失败。
+- 文件夹重命名失败（权限不足、文件被占用等）。
+
+### 回滚动作顺序
+所有回滚动作按**优先级**执行（数值越小越先恢复）：
+1. **恢复注册表 ProfileImagePath**（最关键）
+2. **恢复文件夹名称**
+3. **恢复注册表各子项**（Shell Folders、环境变量等）
+4. **恢复服务状态**（WSearch、Explorer）
+5. **卸载注册表蜂巢**
+
+回滚完成后，系统状态与执行前完全一致。如有备份目录（`.old.时间戳`），请手动检查并删除。
+
+### 手动紧急恢复
+如果脚本意外中断且自动回滚未完全执行，可参考以下步骤手动恢复：
+1. 打开 `regedit`，导航至 `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList`。
+2. 找到目标用户的 SID 项，将 `ProfileImagePath` 改回原中文路径。
+3. 重启计算机，使用另一个管理员账户登录，将 `C:\Users` 下的英文文件夹重命名为中文原名。
+4. 删除可能存在的符号链接 `C:\Users\中文名`（如果已是链接，直接删除即可）。
+
+---
+
+## ⚠️ 重要注意事项
+| 类别 | 说明 |
+|------|------|
+| **账户要求** | 目标用户**必须完全注销**！建议使用内置 `Administrator` 账户执行脚本。 |
+| **微软账户** | 必须先将微软账户转换为本地账户，否则云端会恢复中文文件夹名。脚本会引导操作。 |
+| **OneDrive** | 脚本会主动断开 OneDrive 链接。完成后**务必登录网页版 OneDrive，将云端旧文件夹重命名**，再重新链接本地 OneDrive 并指向新路径。 |
+| **Windows Hello (PIN/指纹/人脸)** | 修改后可能失效。以管理员身份运行：`del /F /Q "%windir%\ServiceProfiles\LocalService\AppData\Local\Microsoft\Ngc"`，然后重新设置 PIN。 |
+| **WSL 用户** | 若 WSL 配置文件（`.wslconfig`）引用了旧路径，需手动修改。脚本会给出警告。 |
+| **杀毒软件** | 极少数情况下安全软件可能锁定文件导致重命名失败。若遇到，建议临时禁用实时防护后重试。 |
+| **权限继承** | 重命名后部分文件可能权限异常。可执行：`takeown /F "C:\Users\新英文名" /R /D Y` 和 `icacls "C:\Users\新英文名" /inheritance:e` 修复。 |
+| **系统还原点** | 脚本会自动尝试创建还原点（需卷影复制服务正常）。若失败，不影响主流程。 |
+
+---
+
+## 📋 操作前备份建议
+> 🔔 **强烈建议在执行脚本前手动备份关键数据！**
+
+### 1. 注册表备份
+```powershell
+# 备份整个 ProfileList 分支
+reg export "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList" "C:\backup_profilelist.reg"
+```
+### 2. 用户文件夹备份（可选）
+```powershell
+# 使用 Robocopy 复制用户目录到其他盘（需管理员权限）
+robocopy "C:\Users\中文名" "D:\Backup\Users\中文名" /E /COPYALL /R:0 /W:0
+```
+### 3. 创建系统还原点（手动）
+```powershell
+Checkpoint-Computer -Description "Before_RenameUserPro" -RestorePointType MODIFY_SETTINGS
+```
+### 4. 记录当前用户 SID
+```powershell
+(New-Object System.Security.Principal.NTAccount("你的用户名")).Translate([System.Security.Principal.SecurityIdentifier]).Value
+```
+
+---
+
+## ❓ 常见问题 FAQ
+**Q1：脚本执行后，桌面/开始菜单快捷方式失效怎么办？**  
+A：脚本已自动修复绝大多数快捷方式。若仍有个别失效，手动删除并重新固定即可。
+
+**Q2：修改后某些 UWP 应用（如照片、计算器）打不开？**  
+A：极少数应用需要重置。前往 `设置 → 应用 → 找到该应用 → 高级选项 → 重置`。
+
+**Q3：为什么登录后，`C:\Users` 下又出现了中文文件夹？**  
+A：通常是微软账户云端同步导致。请确保已转换为本地账户，且 OneDrive 已按提示重新配置。
+
+**Q4：脚本提示“另一个实例正在运行”？**  
+A：脚本使用全局互斥锁防止并发。若确认没有其他实例，可重启 PowerShell 窗口后重试。
+
+**Q5：可以只修改文件夹名而不创建符号链接吗？**  
+A：不推荐。符号链接用于兼容硬编码旧路径的软件，删除后可能导致部分软件无法运行。若坚持删除，直接删除 `C:\Users\中文名` 这个链接即可（不影响实际数据）。
+
+**Q6：脚本支持 Windows 7 吗？**  
+A：不支持。仅 Windows 10 Build 10240 及 Windows 11 经过完整测试。
+
+**Q7：执行过程中断电或强制关机了怎么办？**  
+A：重启后使用另一管理员账户登录，检查 `C:\Users` 下文件夹名称和注册表 `ProfileImagePath` 是否一致。如不一致，参考上文“手动紧急恢复”步骤修正。
+
+---
+
+## 🤝 贡献与反馈
+如果你遇到问题或有改进建议，欢迎通过 Issue 提出。  
+请提供以下信息以便快速定位：
+- Windows 版本（`winver` 命令查看）
+- PowerShell 版本（`$PSVersionTable`）
+- 脚本日志文件（位于 `%TEMP%\RenameUserPro_*.log`）
+
+---
+
+**最后提醒：** 该脚本修改系统关键配置，请务必在理解原理的前提下使用。尽管内置多重安全机制，仍建议**提前备份重要数据**。祝使用顺利！
