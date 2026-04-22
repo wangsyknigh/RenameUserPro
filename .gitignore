@@ -1,0 +1,32 @@
+# PowerShell 脚本相关
+*.ps1.xml
+*.ps1.ps1xml
+*.ps1.help.txt
+*.psd1.ps1xml
+*.psm1.ps1xml
+
+# 脚本执行日志
+*.log
+*.transcript
+
+# 临时文件
+*.tmp
+*.temp
+~$*
+
+# 用户配置文件（可选，若你在项目中使用）
+*.ps1.local.ps1
+*.psd1.local.ps1
+
+# 系统生成文件
+Thumbs.db
+Desktop.ini
+
+# 压缩文件（通常不提交二进制）
+*.zip
+*.7z
+*.rar
+
+# 敏感信息文件（如含密码的配置文件）
+*.credential
+*.secret
