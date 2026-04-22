@@ -1465,4 +1465,4 @@ if ($script:AllSkipped) {
     exit 1
 } else {
     Wait-ForExit
-}】这是修复后完整的代码，再次审查一下
+}
