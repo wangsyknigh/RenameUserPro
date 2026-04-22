@@ -131,3 +131,18 @@
 #### 1️⃣ 普通单用户模式（交互式）
 ```powershell
 .\RenameUserPro.ps1
+```
+- 脚本会列出所有中文用户，输入编号选择目标用户。
+- 自动生成建议英文名，回车确认或手动输入新名。
+- 确认后开始执行。
+
+#### 2️⃣ 指定新用户名（非交互）
+```powershell
+.\RenameUserPro.ps1 -NewUserName "ZhangSan"
+```
+- 如果系统只有一个中文用户，直接使用指定名称处理；多个用户时仍需选择。
+
+#### 3️⃣ 批量处理所有中文用户
+```powershell
+.\RenameUserPro.ps1 -BatchMode
+```
